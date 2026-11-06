@@ -1,0 +1,239 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Windows.Forms;
+using QuanLySach.BUS;
+using QuanLySach.Entities;
+
+namespace QuanLySach.GUI
+{
+    public partial class frmQuanLySach : Form
+    {
+        private readonly TheLoaiBUS _theLoaiBUS = new TheLoaiBUS();
+        private readonly SachBUS _sachBUS = new SachBUS();
+
+        public frmQuanLySach()
+        {
+            InitializeComponent();
+        }
+
+        private void frmQuanLySach_Load(object sender, EventArgs e)
+        {
+            this.StartPosition = FormStartPosition.CenterScreen;
+            this.AcceptButton = btnThem;
+            this.CancelButton = btnThoat;
+
+            LoadTheLoai();
+            LoadDanhSachSach();
+            ResetForm();
+        }
+
+        private void LoadTheLoai()
+        {
+            try
+            {
+                var listTheLoai = _theLoaiBUS.GetAll();
+                cboTheLoai.DataSource = listTheLoai;
+                cboTheLoai.DisplayMember = "TenLoai";
+                cboTheLoai.ValueMember = "MaLoai";
+                cboTheLoai.SelectedIndex = -1;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi nạp thể loại: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void LoadDanhSachSach()
+        {
+            try
+            {
+                var list = _sachBUS.GetAll();
+                var displayList = list.Select(s => new
+                {
+                    MaSach = s.MaSach,
+                    TenSach = s.TenSach,
+                    NgayNhap = s.NgayNhap.ToString("dd/MM/yyyy"),
+                    SoLuong = s.SoLuong,
+                    DonGia = s.DonGia.ToString("N0"),
+                    TenLoai = s.TheLoai != null ? s.TheLoai.TenLoai : "",
+                    MaLoai = s.MaLoai
+                }).ToList();
+
+                dgvSach.DataSource = displayList;
+
+                if (dgvSach.Columns["MaSach"] != null) dgvSach.Columns["MaSach"].HeaderText = "Mã sách";
+                if (dgvSach.Columns["TenSach"] != null) dgvSach.Columns["TenSach"].HeaderText = "Tên sách";
+                if (dgvSach.Columns["NgayNhap"] != null) dgvSach.Columns["NgayNhap"].HeaderText = "Ngày nhập";
+                if (dgvSach.Columns["SoLuong"] != null) dgvSach.Columns["SoLuong"].HeaderText = "Số lượng";
+                if (dgvSach.Columns["DonGia"] != null) dgvSach.Columns["DonGia"].HeaderText = "Đơn giá";
+                if (dgvSach.Columns["TenLoai"] != null) dgvSach.Columns["TenLoai"].HeaderText = "Thể loại";
+                if (dgvSach.Columns["MaLoai"] != null) dgvSach.Columns["MaLoai"].Visible = false;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi nạp danh sách sách: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void ResetForm()
+        {
+            txtMaSach.Clear();
+            txtTenSach.Clear();
+            txtSoLuong.Clear();
+            txtDonGia.Clear();
+            dtpNgayNhap.Value = DateTime.Now;
+            cboTheLoai.SelectedIndex = -1;
+
+            txtMaSach.ReadOnly = false;
+            btnThem.Enabled = true;
+            btnSua.Enabled = false;
+            btnXoa.Enabled = false;
+
+            dgvSach.ClearSelection();
+            txtMaSach.Focus();
+        }
+
+        private void btnMoi_Click(object sender, EventArgs e)
+        {
+            ResetForm();
+        }
+
+        private void dgvSach_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= 0 && e.RowIndex < dgvSach.Rows.Count)
+            {
+                var row = dgvSach.Rows[e.RowIndex];
+                if (row.Cells["MaSach"].Value != null)
+                {
+                    txtMaSach.Text = row.Cells["MaSach"].Value.ToString();
+                    txtTenSach.Text = row.Cells["TenSach"].Value?.ToString();
+
+                    if (DateTime.TryParseExact(row.Cells["NgayNhap"].Value?.ToString(), "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out DateTime ngay))
+                        dtpNgayNhap.Value = ngay;
+
+                    txtSoLuong.Text = row.Cells["SoLuong"].Value?.ToString();
+
+                    string rawDonGia = row.Cells["DonGia"].Value?.ToString()?.Replace(".", "").Replace(",", "") ?? "";
+                    txtDonGia.Text = rawDonGia;
+
+                    if (row.Cells["MaLoai"].Value != null)
+                    {
+                        cboTheLoai.SelectedValue = row.Cells["MaLoai"].Value.ToString();
+                    }
+
+                    txtMaSach.ReadOnly = true;
+                    btnThem.Enabled = false;
+                    btnSua.Enabled = true;
+                    btnXoa.Enabled = true;
+                }
+            }
+        }
+
+        private void btnThem_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (!int.TryParse(txtSoLuong.Text.Trim(), out int soLuong))
+                    throw new ArgumentException("Số lượng phải là số nguyên hợp lệ!");
+
+                if (!decimal.TryParse(txtDonGia.Text.Trim(), out decimal donGia))
+                    throw new ArgumentException("Đơn giá phải là số hợp lệ!");
+
+                var sach = new Sach
+                {
+                    MaSach = txtMaSach.Text.Trim(),
+                    TenSach = txtTenSach.Text.Trim(),
+                    NgayNhap = dtpNgayNhap.Value,
+                    SoLuong = soLuong,
+                    DonGia = donGia,
+                    MaLoai = cboTheLoai.SelectedValue?.ToString() ?? string.Empty
+                };
+
+                _sachBUS.AddSach(sach);
+                MessageBox.Show("Thêm sách thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                LoadDanhSachSach();
+                ResetForm();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Thông báo lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void btnSua_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (!int.TryParse(txtSoLuong.Text.Trim(), out int soLuong))
+                    throw new ArgumentException("Số lượng phải là số nguyên hợp lệ!");
+
+                if (!decimal.TryParse(txtDonGia.Text.Trim(), out decimal donGia))
+                    throw new ArgumentException("Đơn giá phải là số hợp lệ!");
+
+                var sach = new Sach
+                {
+                    MaSach = txtMaSach.Text.Trim(),
+                    TenSach = txtTenSach.Text.Trim(),
+                    NgayNhap = dtpNgayNhap.Value,
+                    SoLuong = soLuong,
+                    DonGia = donGia,
+                    MaLoai = cboTheLoai.SelectedValue?.ToString() ?? string.Empty
+                };
+
+                _sachBUS.UpdateSach(sach);
+                MessageBox.Show("Cập nhật thông tin sách thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                LoadDanhSachSach();
+                ResetForm();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Thông báo lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void btnXoa_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string maSach = txtMaSach.Text.Trim();
+                if (string.IsNullOrEmpty(maSach))
+                {
+                    MessageBox.Show("Vui lòng chọn sách cần xóa!", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                DialogResult result = MessageBox.Show($"Bạn có chắc chắn muốn xóa sách có mã '{maSach}' không?",
+                    "Xác nhận xóa", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+                if (result == DialogResult.Yes)
+                {
+                    _sachBUS.DeleteSach(maSach);
+                    MessageBox.Show("Xóa sách thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    LoadDanhSachSach();
+                    ResetForm();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Thông báo lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void btnThoat_Click(object sender, EventArgs e)
+        {
+            this.Close();
+        }
+
+        private void frmQuanLySach_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            DialogResult dr = MessageBox.Show("Bạn có muốn thoát khỏi chương trình?", "Xác nhận thoát",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            if (dr == DialogResult.No)
+            {
+                e.Cancel = true;
+            }
+        }
+    }
+}
